@@ -1,0 +1,30 @@
+{
+  "name": "api-busca-concursos",
+  "version": "1.2.0",
+  "description": "API REST independente, altamente tolerante a falhas e segura para busca de concursos públicos no Brasil",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles",
+    "diagnostico": "node scripts/diagnostico-fontes.js"
+  },
+  "keywords": ["concursos", "api", "brasil", "express", "nodejs", "rest"],
+  "author": "Engenheiro de Software Sênior",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "node-cache": "^5.1.2",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
