@@ -1,48 +1,25 @@
-import NodeCache from 'node-cache';
-import { SOURCES_CONFIG } from '../config/sources.config.js';
-
 class CacheService {
-  constructor() {
-    this.cache = new NodeCache({ stdTTL: 0, checkperiod: 600 });
+  constructor(ttlMinutos = 30) {
+    this.cache = new Map();
+    this.ttlMs = ttlMinutos * 60 * 1000;
     this.fetchingLocks = new Map();
   }
 
   get(key) {
-    const record = this.cache.get(key);
-    if (!record) return null;
-
+    const item = this.cache.get(key);
+    if (!item) return null;
     const agora = Date.now();
-    const idadeSegundos = Math.floor((agora - record.timestamp) / 1000);
-
-    const isFrescorValido = idadeSegundos <= SOURCES_CONFIG.cacheTtlSeconds;
-    const isDentroDoLimiteStale = idadeSegundos <= SOURCES_CONFIG.cacheMaxStaleSeconds;
-
-    if (!isDentroDoLimiteStale) {
-      this.cache.del(key);
-      return null;
-    }
-
-    return {
-      dados: record.dados,
-      fontes: record.fontes,
-      obsoleto: !isFrescorValido,
-      timestamp: record.timestamp,
-      ultimaAtualizacaoIso: new Date(record.timestamp).toISOString()
-    };
+    const obsoleto = (agora - item.timestamp) > this.ttlMs;
+    return { ...item, obsoleto };
   }
 
-  set(key, dados, fontes) {
-    if (!Array.isArray(dados)) return;
+  set(key, dados, fontes = []) {
     this.cache.set(key, {
-      dados,
-      fontes,
-      timestamp: Date.now()
+      dados: Array.isArray(dados) ? dados : [],
+      fontes: Array.isArray(fontes) ? fontes : [],
+      timestamp: Date.now(),
+      ultimaAtualizacaoIso: new Date().toISOString()
     });
-  }
-
-  flush() {
-    this.cache.flushAll();
-    this.fetchingLocks.clear();
   }
 }
 
