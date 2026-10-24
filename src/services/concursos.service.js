@@ -1,3 +1,4 @@
+import { LocalSource } from './sources/local.source.js';
 import { DenoDevSource } from './sources/denoDev.source.js';
 import { PciRssSource } from './sources/pciRss.source.js';
 import { cacheService } from './cache.service.js';
@@ -7,6 +8,7 @@ import { ServiceUnavailableError } from '../errors/api.errors.js';
 class ConcursosService {
   constructor() {
     this.sources = [
+      new LocalSource(),
       new DenoDevSource(),
       new PciRssSource()
     ];
@@ -139,7 +141,6 @@ class ConcursosService {
     const mapa = new Map();
 
     concursos.forEach(item => {
-      // Chave de comparação canônica
       const chaveDeduplicacao = item.linkFonte && item.linkFonte.startsWith('http')
         ? normalizarTexto(item.linkFonte)
         : `${normalizarTexto(item.titulo)}|${normalizarTexto(item.orgao)}|${item.uf || 'BR'}`;
@@ -151,10 +152,9 @@ class ConcursosService {
         });
       } else {
         const existente = mapa.get(chaveDeduplicacao);
-        
-        // Conservador: Mescla campos não nulos sem sobrescrever dados válidos antigos com nulo
+
         mapa.set(chaveDeduplicacao, {
-          id: existente.id, // Preserva o ID estável do primeiro registro
+          id: existente.id,
           titulo: existente.titulo.length >= item.titulo.length ? existente.titulo : item.titulo,
           orgao: existente.orgao || item.orgao,
           cargo: existente.cargo || item.cargo,
