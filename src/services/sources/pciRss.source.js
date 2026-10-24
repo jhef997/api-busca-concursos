@@ -4,7 +4,7 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Web Scraper Filtrado)';
+    this.nome = 'PCI Concursos (Com Extração de Metadados)';
   }
 
   async buscarConcursos() {
@@ -24,7 +24,6 @@ export class PciRssSource {
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
 
-      // Termos obrigatórios que comprovam que é um órgão/concurso real e não apenas o nome de uma cidade
       const termosInstitucionais = [
         'prefeitura', 'camara', 'secretaria', 'tribunal', 'conselho', 'instituto', 
         'universidade', 'faculdade', 'fundacao', 'servico', 'hospital', 'autarquia', 
@@ -45,34 +44,61 @@ export class PciRssSource {
           });
 
           const html = String(response.data || '');
-          const regexTagA = /<a\b[^>]*?href=["']([^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
-          let match;
+          
+          // Captura blocos HTML inteiros onde os concursos são listados para extrair o texto de apoio (vagas, salário)
+          const regexBloco = /<div class="(?:ca|cd|concurso)"[^>]*>([\s\S]*?)<\/div>/gi;
+          let blocoMatch;
 
-          while ((match = regexTagA.exec(html)) !== null) {
-            let href = match[1].trim();
-            let tituloRaw = match[2];
+          // Se a página usar blocos estruturados
+          while ((blocoMatch = regexBloco.exec(html)) !== null) {
+            const blocoHtml = blocoMatch[1];
+            
+            // Extrai o link dentro do bloco
+            const linkMatch = blocoHtml.match(/href=["']([^"']*?\/concursos\/[^"']+)["'][^>]*?>([\s\S]*?)<\/a>/i);
+            if (!linkMatch) continue;
 
-            let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+            const href = linkMatch[1].trim();
+            const tituloRaw = linkMatch[2];
+            const tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
             if (!tituloLimpo || tituloLimpo.length < 8) continue;
-            if (!href.includes('/concurso')) continue;
 
-            // Ignorar links de navegação e menus base
-            if (href.endsWith('/concursos/') || href.endsWith('/sp/') || href.endsWith('/mg/') || href.endsWith('/rj/') || href.endsWith('/ma/') || href.endsWith('/ba/') || href.endsWith('/pr/') || href.endsWith('/rs/') || href.endsWith('/sc/') || href.endsWith('/nacional/')) continue;
+            const cleanHref = href.split('?')[0].split('#')[0];
+            const partes = cleanHref.split('/').filter(Boolean);
+            const slugFinal = partes[partes.length - 1].toLowerCase();
 
-            // FILTRO RIGOROSO: O título ou o link DEVE conter um termo institucional válido (bloqueia nomes soltos de cidades e menus)
-            const textoCompleto = (tituloLimpo + ' ' + href).toLowerCase();
+            const ignorados = ['sp', 'mg', 'rj', 'ma', 'ba', 'pr', 'rs', 'sc', 'nacional', 'nordeste', 'sul', 'norte', 'sudeste', 'centrooeste', 'cidades', 'professores', 'previstos', 'cargos', 'vagas'];
+            if (ignorados.includes(slugFinal) || !slugFinal.includes('-')) continue;
+
+            const textoCompleto = (tituloLimpo + ' ' + blocoHtml).toLowerCase();
             const ehOrgaoReal = termosInstitucionais.some(termo => textoCompleto.includes(termo));
             if (!ehOrgaoReal) continue;
 
-            // Lista negra extra para garantir zero lixo
-            const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais|cidades|professores|previstos|cargos/i;
+            const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
             if (blacklist.test(tituloLimpo)) continue;
 
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
-
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
+
+            // --- EXTRAÇÃO INTELIGENTE DE METADADOS DO BLOCO ---
+            const textoBlocoPuro = blocoHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+            // Extrair Vagas
+            let vagas = 'Consulte o edital';
+            const matchVagas = textoBlocoPuro.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
+            if (matchVagas) vagas = matchVagas[0];
+
+            // Extrair Remuneração / Salário
+            let remuneracao = 'Consulte o edital';
+            const matchSalario = textoBlocoPuro.match(/(R\$\s*[\d.,]+(?:\s*a\s*R\$\s*[\d.,]+)?)/i);
+            if (matchSalario) remuneracao = matchSalario[1];
+
+            // Extrair Escolaridade
+            let escolaridade = 'Consulte o edital';
+            if (/superior/i.test(textoBlocoPuro)) escolaridade = 'Ensino Superior';
+            else if (/médio|medio/i.test(textoBlocoPuro)) escolaridade = 'Ensino Médio';
+            else if (/fundamental/i.test(textoBlocoPuro)) escolaridade = 'Ensino Fundamental';
 
             const orgao = tituloLimpo.split('-')[0].trim();
 
@@ -80,10 +106,10 @@ export class PciRssSource {
               id: gerarHashEstavel(tituloLimpo, linkFonte),
               titulo: tituloLimpo,
               orgao: orgao || 'Não informado',
-              cargo: 'Consulte o edital no site',
-              escolaridade: 'Consulte no edital',
-              vagas: 'Consulte no edital',
-              remuneracao: 'Consulte no edital',
+              cargo: 'Consulte o edital',
+              escolaridade: escolaridade,
+              vagas: vagas,
+              remuneracao: remuneracao,
               uf: pagina.uf,
               municipio: null,
               situacao: 'ABERTO',
