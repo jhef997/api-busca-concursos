@@ -4,34 +4,26 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Scraper Anti-Cidades)';
+    this.nome = 'PCI Concursos (Scraper Definitivo - Notícias/Editais)';
   }
 
   async buscarConcursos() {
     try {
       const paginas = [
-        { url: 'https://www.pciconcursos.com.br/concursos/sp/', uf: 'SP' },
-        { url: 'https://www.pciconcursos.com.br/concursos/mg/', uf: 'MG' },
-        { url: 'https://www.pciconcursos.com.br/concursos/rj/', uf: 'RJ' },
-        { url: 'https://www.pciconcursos.com.br/concursos/ma/', uf: 'MA' },
-        { url: 'https://www.pciconcursos.com.br/concursos/ba/', uf: 'BA' },
-        { url: 'https://www.pciconcursos.com.br/concursos/pr/', uf: 'PR' },
-        { url: 'https://www.pciconcursos.com.br/concursos/rs/', uf: 'RS' },
-        { url: 'https://www.pciconcursos.com.br/concursos/sc/', uf: 'SC' },
-        { url: 'https://www.pciconcursos.com.br/concursos/nacional/', uf: 'BR' }
+        { url: 'https://www.pciconcursos.com.br/concursos/sp/', ufPadrao: 'SP' },
+        { url: 'https://www.pciconcursos.com.br/concursos/mg/', ufPadrao: 'MG' },
+        { url: 'https://www.pciconcursos.com.br/concursos/rj/', ufPadrao: 'RJ' },
+        { url: 'https://www.pciconcursos.com.br/concursos/ma/', ufPadrao: 'MA' },
+        { url: 'https://www.pciconcursos.com.br/concursos/ba/', ufPadrao: 'BA' },
+        { url: 'https://www.pciconcursos.com.br/concursos/pr/', ufPadrao: 'PR' },
+        { url: 'https://www.pciconcursos.com.br/concursos/rs/', ufPadrao: 'RS' },
+        { url: 'https://www.pciconcursos.com.br/concursos/sc/', ufPadrao: 'SC' },
+        { url: 'https://www.pciconcursos.com.br/concursos/nacional/', ufPadrao: 'BR' }
       ];
 
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
-
-      // Prefixos obrigatórios que um edital real deve ter no link ou título
-      const prefixosValidos = [
-        'prefeitura', 'camara', 'secretaria', 'tribunal', 'conselho', 'instituto', 
-        'universidade', 'faculdade', 'fundacao', 'servico', 'hospital', 'autarquia', 
-        'agencia', 'ministerio', 'policia', 'bombeiros', 'guarda', 'comando', 
-        'departamento', 'empresa', 'detran', 'sefaz', 'coren', 'crea', 'crm', 
-        'oab', 'tj-', 'mp-', 'trt', 'tre', 'inss', 'ibge', 'ssp', 'mgs', 'inb'
-      ];
+      const ufsValidas = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
       for (const pagina of paginas) {
         try {
@@ -53,31 +45,33 @@ export class PciRssSource {
 
             let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
-            if (!tituloLimpo || tituloLimpo.length < 8) continue;
-            if (!href.includes('/concursos/')) continue;
+            if (!tituloLimpo || tituloLimpo.length < 10) continue;
 
-            const cleanHref = href.split('?')[0].split('#')[0];
-            const partes = cleanHref.split('/').filter(Boolean);
+            // O SEGREDO: Todos os concursos abertos reais no PCI apontam para /noticias/
+            if (!href.includes('/noticias/')) continue;
 
-            // FILTRE CRUCIAL 1: Links de cidades têm 3 partes (ex: /concursos/sp/adamantina). Ignoramos todos!
-            // Apenas aceitamos links diretos de 2 partes (ex: /concursos/prefeitura-de-matao-sp)
-            if (partes.length !== 2) continue;
-
-            const slug = partes[1].toLowerCase();
-
-            // FILTRO CRUCIAL 2: O slug do edital deve começar obrigatoriamente com um termo institucional real
-            const comecaComOrgao = prefixosValidos.some(termo => slug.startsWith(termo));
-            if (!comecaComOrgao) continue;
-
-            // Lista negra para eliminar lixo residual
-            const blacklist = /apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
-            if (blacklist.test(tituloLimpo)) continue;
+            // Eliminar menus e links de navegação genéricos
+            if (/^(apostilas|provas|simulados|aulas|artigos|home|contato|privacidade)/i.test(tituloLimpo)) continue;
 
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
+
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
 
-            // Extração de dados do título
+            // Detecção inteligente da UF pelo link ou título
+            let ufDetectada = pagina.ufPadrao;
+            const urlLower = linkFonte.toLowerCase();
+            const tituloLower = tituloLimpo.toLowerCase();
+
+            for (const uf of ufsValidas) {
+              const ufL = uf.toLowerCase();
+              if (urlLower.includes(`-${ufL}`) || urlLower.includes(`/${ufL}/`) || tituloLower.includes(`-${ufL}`) || tituloLower.includes(` ${uf} `)) {
+                ufDetectada = uf;
+                break;
+              }
+            }
+
+            // Extração de metadados do título (Vagas, Salário, Escolaridade)
             let vagas = 'Consulte o edital';
             const matchVagas = tituloLimpo.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
             if (matchVagas) vagas = matchVagas[0];
@@ -101,7 +95,7 @@ export class PciRssSource {
               escolaridade: escolaridade,
               vagas: vagas,
               remuneracao: remuneracao,
-              uf: pagina.uf,
+              uf: ufDetectada,
               municipio: null,
               situacao: 'ABERTO',
               dataEncerramento: null,
