@@ -16,6 +16,7 @@ export class PciRssSource {
       ];
 
       let todosConcursos = [];
+      const urlsAdicionadas = new Set(); // Evitar duplicados na mesma raspagem
 
       for (const pagina of paginas) {
         try {
@@ -30,39 +31,44 @@ export class PciRssSource {
 
           const html = String(response.data || '');
 
-          // Captura resiliente para qualquer <a ... href=".../concurso/...">
-          const regexConcurso = /<a\b[^>]*?href=["']([^"']*?\/concurso\/[^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
+          // Captura qualquer link da página
+          const regexTagA = /<a\b[^>]*?href=["']([^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
 
           let match;
-          while ((match = regexConcurso.exec(html)) !== null) {
+          while ((match = regexTagA.exec(html)) !== null) {
             let href = match[1].trim();
             let tituloRaw = match[2];
 
             let tituloLimpo = tituloRaw
               .replace(/<[^>]+>/g, '')
               .replace(/&nbsp;/gi, ' ')
-              .replace(/&amp;/gi, '&')
-              .replace(/&quot;/gi, '"')
-              .replace(/&#039;/gi, "'")
               .replace(/\s+/g, ' ')
               .trim();
 
+            // Ignora títulos vazios ou muito curtos
             if (!tituloLimpo || tituloLimpo.length < 5) continue;
 
-            // Ignora páginas de diretório no plural (/concursos/)
-            if (href.includes('/concursos/')) continue;
+            // 1. OBRIGATÓRIO: Tem de ser um link de concurso ou notícia
+            if (!href.includes('/concursos/') && !href.includes('/noticias/')) continue;
 
-            // Filtro de exclusão para termos irrelevantes/navegação
-            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas/i;
+            // 2. EXCLUSÃO: Ignora diretórios de estados/regiões (ex: /concursos/ma/, /concursos/nordeste/)
+            if (/\/(concursos|noticias)\/(nacional|sudeste|sul|nordeste|norte|centrooeste|cidades|[a-z]{2})\/?$/i.test(href)) continue;
+
+            // 3. EXCLUSÃO: Ignora menus e lixo
+            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas|lista geral|clique aqui/i;
             if (blacklist.test(tituloLimpo)) continue;
 
-            // Formata URL relativa para absoluta
+            // Formata URL
             let linkFonte = href;
             if (href.startsWith('/')) {
               linkFonte = `https://www.pciconcursos.com.br${href}`;
             } else if (!href.startsWith('http')) {
               linkFonte = `https://www.pciconcursos.com.br/${href}`;
             }
+
+            // Evita adicionar o mesmo edital duas vezes
+            if (urlsAdicionadas.has(linkFonte)) continue;
+            urlsAdicionadas.add(linkFonte);
 
             const partes = tituloLimpo.split('-');
             const orgao = partes[0].trim();
@@ -71,7 +77,7 @@ export class PciRssSource {
               id: gerarHashEstavel(tituloLimpo, linkFonte),
               titulo: tituloLimpo,
               orgao: orgao || 'Não informado',
-              cargo: 'Consulte o edital no PCI',
+              cargo: 'Consulte o edital no site',
               escolaridade: 'Consulte no edital',
               vagas: 'Consulte no edital',
               remuneracao: 'Consulte no edital',
@@ -92,7 +98,7 @@ export class PciRssSource {
 
       return { sucesso: true, dados: todosConcursos };
     } catch (error) {
-      console.error('Erro geral no Scraper do PCI Concursos:', error.message);
+      console.error('Erro geral no Scraper:', error.message);
       return { sucesso: false, dados: [], erro: error.message };
     }
   }
