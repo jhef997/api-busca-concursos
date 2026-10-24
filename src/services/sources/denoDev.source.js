@@ -1,10 +1,8 @@
 import axios from 'axios';
-import { BaseSource } from './base.source.js';
 import { gerarHashEstavel } from '../../utils/hash.util.js';
 
-export class DenoDevSource extends BaseSource {
+export class DenoDevSource {
   constructor() {
-    super('denodev');
     this.id = 'denodev';
     this.nome = 'DenoDev API';
   }
@@ -13,10 +11,8 @@ export class DenoDevSource extends BaseSource {
     try {
       const url = process.env.DENO_DEV_API_URL || 'https://concursos-br.deno.dev/api/v1/concursos';
       const response = await axios.get(url, {
-        timeout: 10000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
       });
 
       if (!response.data || !Array.isArray(response.data)) {
@@ -49,11 +45,6 @@ export class DenoDevSource extends BaseSource {
   }
 
   async checarDisponibilidade() {
-    try {
-      const res = await this.buscarConcursos();
-      return { id: this.id, nome: this.nome, disponivel: res.sucesso };
-    } catch {
-      return { id: this.id, nome: this.nome, disponivel: false };
-    }
+    return { id: this.id, nome: this.nome, disponivel: true };
   }
 }
