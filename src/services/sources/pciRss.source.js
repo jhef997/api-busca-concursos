@@ -4,26 +4,26 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Scraper Definitivo - Notícias/Editais)';
+    this.nome = 'PCI Concursos (Scraper por Estado Preciso)';
   }
 
   async buscarConcursos() {
     try {
+      // Mapeamento direto e seguro: cada URL state-page assume a sua UF exata
       const paginas = [
-        { url: 'https://www.pciconcursos.com.br/concursos/sp/', ufPadrao: 'SP' },
-        { url: 'https://www.pciconcursos.com.br/concursos/mg/', ufPadrao: 'MG' },
-        { url: 'https://www.pciconcursos.com.br/concursos/rj/', ufPadrao: 'RJ' },
-        { url: 'https://www.pciconcursos.com.br/concursos/ma/', ufPadrao: 'MA' },
-        { url: 'https://www.pciconcursos.com.br/concursos/ba/', ufPadrao: 'BA' },
-        { url: 'https://www.pciconcursos.com.br/concursos/pr/', ufPadrao: 'PR' },
-        { url: 'https://www.pciconcursos.com.br/concursos/rs/', ufPadrao: 'RS' },
-        { url: 'https://www.pciconcursos.com.br/concursos/sc/', ufPadrao: 'SC' },
-        { url: 'https://www.pciconcursos.com.br/concursos/nacional/', ufPadrao: 'BR' }
+        { url: 'https://www.pciconcursos.com.br/concursos/sp/', uf: 'SP' },
+        { url: 'https://www.pciconcursos.com.br/concursos/mg/', uf: 'MG' },
+        { url: 'https://www.pciconcursos.com.br/concursos/rj/', uf: 'RJ' },
+        { url: 'https://www.pciconcursos.com.br/concursos/ma/', uf: 'MA' },
+        { url: 'https://www.pciconcursos.com.br/concursos/ba/', uf: 'BA' },
+        { url: 'https://www.pciconcursos.com.br/concursos/pr/', uf: 'PR' },
+        { url: 'https://www.pciconcursos.com.br/concursos/rs/', uf: 'RS' },
+        { url: 'https://www.pciconcursos.com.br/concursos/sc/', uf: 'SC' },
+        { url: 'https://www.pciconcursos.com.br/concursos/nacional/', uf: 'BR' }
       ];
 
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
-      const ufsValidas = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
       for (const pagina of paginas) {
         try {
@@ -46,11 +46,8 @@ export class PciRssSource {
             let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
             if (!tituloLimpo || tituloLimpo.length < 10) continue;
-
-            // O SEGREDO: Todos os concursos abertos reais no PCI apontam para /noticias/
             if (!href.includes('/noticias/')) continue;
 
-            // Eliminar menus e links de navegação genéricos
             if (/^(apostilas|provas|simulados|aulas|artigos|home|contato|privacidade)/i.test(tituloLimpo)) continue;
 
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
@@ -58,20 +55,7 @@ export class PciRssSource {
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
 
-            // Detecção inteligente da UF pelo link ou título
-            let ufDetectada = pagina.ufPadrao;
-            const urlLower = linkFonte.toLowerCase();
-            const tituloLower = tituloLimpo.toLowerCase();
-
-            for (const uf of ufsValidas) {
-              const ufL = uf.toLowerCase();
-              if (urlLower.includes(`-${ufL}`) || urlLower.includes(`/${ufL}/`) || tituloLower.includes(`-${ufL}`) || tituloLower.includes(` ${uf} `)) {
-                ufDetectada = uf;
-                break;
-              }
-            }
-
-            // Extração de metadados do título (Vagas, Salário, Escolaridade)
+            // Extração de metadados do título
             let vagas = 'Consulte o edital';
             const matchVagas = tituloLimpo.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
             if (matchVagas) vagas = matchVagas[0];
@@ -95,7 +79,7 @@ export class PciRssSource {
               escolaridade: escolaridade,
               vagas: vagas,
               remuneracao: remuneracao,
-              uf: ufDetectada,
+              uf: pagina.uf, // Atribui diretamente a UF correta e segura da página raspada
               municipio: null,
               situacao: 'ABERTO',
               dataEncerramento: null,
