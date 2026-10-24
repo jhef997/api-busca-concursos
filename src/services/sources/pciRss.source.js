@@ -30,11 +30,11 @@ export class PciRssSource {
 
           const html = String(response.data || '');
 
-          // Captura links relativos e absolutos de concursos e noticias do PCI
-          const regexLink = /<a\s+[^>]*href="([^"]*?(?:concurso|noticias)[^"]*?)"[^>]*>([\s\S]*?)<\/a>/gi;
+          // Captura EXCLUSIVAMENTE links no singular (/concurso/), ignorando menus (/concursos/, /provas/, /apostilas/)
+          const regexConcursoEspecifico = /<a\s+[^>]*href="([^"]*?\/concurso\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
 
           let match;
-          while ((match = regexLink.exec(html)) !== null) {
+          while ((match = regexConcursoEspecifico.exec(html)) !== null) {
             let href = match[1];
             let tituloRaw = match[2];
 
@@ -45,9 +45,11 @@ export class PciRssSource {
               .trim();
 
             if (!tituloLimpo || tituloLimpo.length < 5) continue;
-            if (/veja mais|notícias|artigos|anterior|próxima|home|contato/i.test(tituloLimpo)) continue;
+            
+            // Ignora termos genéricos de rodapé/topo
+            if (/veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos/i.test(tituloLimpo)) continue;
 
-            // Formata URL relativa para URL absoluta
+            // Formata URL relativa para absoluta
             let linkFonte = href;
             if (href.startsWith('/')) {
               linkFonte = `https://www.pciconcursos.com.br${href}`;
