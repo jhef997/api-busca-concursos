@@ -16,7 +16,7 @@ export class PciRssSource {
       ];
 
       let todosConcursos = [];
-      const urlsAdicionadas = new Set(); // Evitar duplicados na mesma raspagem
+      const urlsAdicionadas = new Set();
 
       for (const pagina of paginas) {
         try {
@@ -31,10 +31,9 @@ export class PciRssSource {
 
           const html = String(response.data || '');
 
-          // Captura qualquer link da página
           const regexTagA = /<a\b[^>]*?href=["']([^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
-
           let match;
+
           while ((match = regexTagA.exec(html)) !== null) {
             let href = match[1].trim();
             let tituloRaw = match[2];
@@ -45,20 +44,27 @@ export class PciRssSource {
               .replace(/\s+/g, ' ')
               .trim();
 
-            // Ignora títulos vazios ou muito curtos
-            if (!tituloLimpo || tituloLimpo.length < 5) continue;
+            // 1. Títulos muito curtos (ex: nomes de cidades no índice) são descartados
+            if (!tituloLimpo || tituloLimpo.length < 10) continue;
 
-            // 1. OBRIGATÓRIO: Tem de ser um link de concurso ou notícia
+            // 2. Só aceita links base de concursos ou notícias
             if (!href.includes('/concursos/') && !href.includes('/noticias/')) continue;
 
-            // 2. EXCLUSÃO: Ignora diretórios de estados/regiões (ex: /concursos/ma/, /concursos/nordeste/)
-            if (/\/(concursos|noticias)\/(nacional|sudeste|sul|nordeste|norte|centrooeste|cidades|[a-z]{2})\/?$/i.test(href)) continue;
+            // 3. FILTRO DE DIRETÓRIOS ESTADUAIS: Elimina links do "índice de cidades" (ex: /concursos/ma/acailandia)
+            if (/\/(concursos|noticias)\/(ac|al|ap|am|ba|ce|df|es|go|ma|mt|ms|mg|pa|pb|pr|pe|pi|rj|rn|rs|ro|rr|sc|sp|se|to)\b/i.test(href)) continue;
 
-            // 3. EXCLUSÃO: Ignora menus e lixo
-            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas|lista geral|clique aqui/i;
+            // 4. FILTRO DE REGIÕES: Elimina links dos menus de região (ex: /concursos/nordeste/)
+            if (/\/(concursos|noticias)\/(nacional|sudeste|sul|nordeste|norte|centrooeste|cidades)\/?$/i.test(href)) continue;
+
+            // 5. FILTRO DE EDITAL: A URL de um edital real possui hífens (ex: /prefeitura-de-sao-luis-ma)
+            const slug = href.split('/').filter(Boolean).pop();
+            if (!slug || !slug.includes('-')) continue;
+
+            // 6. Lista negra de lixo do site
+            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas|lista geral|clique aqui|índice/i;
             if (blacklist.test(tituloLimpo)) continue;
 
-            // Formata URL
+            // Formatar link absoluto
             let linkFonte = href;
             if (href.startsWith('/')) {
               linkFonte = `https://www.pciconcursos.com.br${href}`;
@@ -66,7 +72,7 @@ export class PciRssSource {
               linkFonte = `https://www.pciconcursos.com.br/${href}`;
             }
 
-            // Evita adicionar o mesmo edital duas vezes
+            // Evitar concursos duplicados na mesma raspagem
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
 
