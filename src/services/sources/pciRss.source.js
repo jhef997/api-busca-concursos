@@ -30,26 +30,29 @@ export class PciRssSource {
 
           const html = String(response.data || '');
 
-          // Captura estritamente URLs que contêm /concurso/ (SINGULAR = Edital do Concurso)
-          const regexConcursoReal = /<a\s+[^>]*href="([^"]*?\/concurso\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+          // Captura resiliente para qualquer <a ... href=".../concurso/...">
+          const regexConcurso = /<a\b[^>]*?href=["']([^"']*?\/concurso\/[^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
 
           let match;
-          while ((match = regexConcursoReal.exec(html)) !== null) {
+          while ((match = regexConcurso.exec(html)) !== null) {
             let href = match[1].trim();
             let tituloRaw = match[2];
 
             let tituloLimpo = tituloRaw
               .replace(/<[^>]+>/g, '')
-              .replace(/&nbsp;/g, ' ')
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&quot;/gi, '"')
+              .replace(/&#039;/gi, "'")
               .replace(/\s+/g, ' ')
               .trim();
 
             if (!tituloLimpo || tituloLimpo.length < 5) continue;
 
-            // Ignora links de diretórios no plural (/concursos/)
+            // Ignora páginas de diretório no plural (/concursos/)
             if (href.includes('/concursos/')) continue;
 
-            // Filtro de exclusão para termos irrelevantes
+            // Filtro de exclusão para termos irrelevantes/navegação
             const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas/i;
             if (blacklist.test(tituloLimpo)) continue;
 
