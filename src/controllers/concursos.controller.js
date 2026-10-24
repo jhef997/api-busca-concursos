@@ -15,7 +15,7 @@ const ATUALIZADO_EM = new Date().toISOString();
 
 // Base local de contingência
 const baseLocal = [
-  {
+  /*{
     id: 'pmma-2026-01',
     titulo: 'Concurso Polícia Militar do Maranhão - PMMA',
     orgao: 'Polícia Militar do Maranhão (PM-MA)',
@@ -49,7 +49,7 @@ const baseLocal = [
     fonteOrigem: 'Base Local',
     atualizadoEm: ATUALIZADO_EM
   }
-];
+];*/
 
 // ---------- Cache da fonte PCI (evita buscar a cada requisição) ----------
 const TTL_MS = 15 * 60 * 1000;
