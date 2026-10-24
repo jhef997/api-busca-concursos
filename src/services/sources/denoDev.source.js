@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { BaseSource } from './base.source.js';
 import { gerarHashEstavel } from '../../utils/hash.util.js';
-import { normalizarTexto } from '../../utils/text.util.js';
 
 export class DenoDevSource extends BaseSource {
   constructor() {
@@ -13,7 +12,12 @@ export class DenoDevSource extends BaseSource {
   async buscarConcursos() {
     try {
       const url = process.env.DENO_DEV_API_URL || 'https://concursos-br.deno.dev/api/v1/concursos';
-      const response = await axios.get(url, { timeout: 8000 });
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
 
       if (!response.data || !Array.isArray(response.data)) {
         return { sucesso: true, dados: [] };
