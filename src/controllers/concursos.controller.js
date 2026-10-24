@@ -13,7 +13,43 @@ const pciSource = new PciRssSource();
 
 const ATUALIZADO_EM = new Date().toISOString();
 
-
+// Base local de contingência
+const baseLocal = [
+  {
+    id: 'pmma-2026-01',
+    titulo: 'Concurso Polícia Militar do Maranhão - PMMA',
+    orgao: 'Polícia Militar do Maranhão (PM-MA)',
+    cargo: 'Soldado / Oficial',
+    escolaridade: 'Ensino Médio / Superior',
+    vagas: 'A definir',
+    remuneracao: 'R$ 4.800,00',
+    uf: 'MA',
+    municipio: 'São Luís',
+    situacao: 'ABERTO',
+    dataEncerramento: null,
+    banca: 'A definir',
+    linkFonte: 'https://www.ma.gov.br/pmma',
+    fonteOrigem: 'Base Local',
+    atualizadoEm: ATUALIZADO_EM
+  },
+  {
+    id: 'cbmma-2026-02',
+    titulo: 'Concurso Corpo de Bombeiros Militar do Maranhão - CBMMA',
+    orgao: 'Corpo de Bombeiros Militar do Maranhão (CBM-MA)',
+    cargo: 'Soldado Bombeiro Militar',
+    escolaridade: 'Ensino Médio',
+    vagas: 'A definir',
+    remuneracao: 'R$ 4.500,00',
+    uf: 'MA',
+    municipio: 'São Luís',
+    situacao: 'ABERTO',
+    dataEncerramento: null,
+    banca: 'A definir',
+    linkFonte: 'https://www.ma.gov.br/cbmma',
+    fonteOrigem: 'Base Local',
+    atualizadoEm: ATUALIZADO_EM
+  }
+];
 
 // ---------- Cache da fonte PCI (evita buscar a cada requisição) ----------
 const TTL_MS = 15 * 60 * 1000;
