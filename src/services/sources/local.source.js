@@ -1,8 +1,5 @@
-import { BaseSource } from './base.source.js';
-
-export class LocalSource extends BaseSource {
+export class LocalSource {
   constructor() {
-    super('local_fallback');
     this.id = 'local_fallback';
     this.nome = 'Base Local de Contingência';
   }
