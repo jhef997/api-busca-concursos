@@ -1,7 +1,7 @@
 import app from './app.js';
 
 const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0'; // Necessário para aceitar conexões no Render/Chromebook
+const HOST = '0.0.0.0';
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 API de Concursos rodando em http://${HOST}:${PORT}`);
