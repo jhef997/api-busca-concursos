@@ -4,7 +4,7 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Com Extração de Metadados)';
+    this.nome = 'PCI Concursos (Scraper Robusto com Metadados)';
   }
 
   async buscarConcursos() {
@@ -44,24 +44,17 @@ export class PciRssSource {
           });
 
           const html = String(response.data || '');
-          
-          // Captura blocos HTML inteiros onde os concursos são listados para extrair o texto de apoio (vagas, salário)
-          const regexBloco = /<div class="(?:ca|cd|concurso)"[^>]*>([\s\S]*?)<\/div>/gi;
-          let blocoMatch;
+          const regexTagA = /<a\b[^>]*?href=["']([^"']+)["'][^>]*?>([\s\S]*?)<\/a>/gi;
+          let match;
 
-          // Se a página usar blocos estruturados
-          while ((blocoMatch = regexBloco.exec(html)) !== null) {
-            const blocoHtml = blocoMatch[1];
-            
-            // Extrai o link dentro do bloco
-            const linkMatch = blocoHtml.match(/href=["']([^"']*?\/concursos\/[^"']+)["'][^>]*?>([\s\S]*?)<\/a>/i);
-            if (!linkMatch) continue;
+          while ((match = regexTagA.exec(html)) !== null) {
+            let href = match[1].trim();
+            let tituloRaw = match[2];
 
-            const href = linkMatch[1].trim();
-            const tituloRaw = linkMatch[2];
-            const tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+            let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
             if (!tituloLimpo || tituloLimpo.length < 8) continue;
+            if (!href.includes('/concursos/')) continue;
 
             const cleanHref = href.split('?')[0].split('#')[0];
             const partes = cleanHref.split('/').filter(Boolean);
@@ -70,35 +63,31 @@ export class PciRssSource {
             const ignorados = ['sp', 'mg', 'rj', 'ma', 'ba', 'pr', 'rs', 'sc', 'nacional', 'nordeste', 'sul', 'norte', 'sudeste', 'centrooeste', 'cidades', 'professores', 'previstos', 'cargos', 'vagas'];
             if (ignorados.includes(slugFinal) || !slugFinal.includes('-')) continue;
 
-            const textoCompleto = (tituloLimpo + ' ' + blocoHtml).toLowerCase();
+            const textoCompleto = (tituloLimpo + ' ' + href).toLowerCase();
             const ehOrgaoReal = termosInstitucionais.some(termo => textoCompleto.includes(termo));
             if (!ehOrgaoReal) continue;
 
-            const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
+            // Blacklist limpa (sem "vagas" para não bloquear editais reais)
+            const blacklist = /apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
             if (blacklist.test(tituloLimpo)) continue;
 
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
 
-            // --- EXTRAÇÃO INTELIGENTE DE METADADOS DO BLOCO ---
-            const textoBlocoPuro = blocoHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-
-            // Extrair Vagas
+            // Extração segura direto do título do edital
             let vagas = 'Consulte o edital';
-            const matchVagas = textoBlocoPuro.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
+            const matchVagas = tituloLimpo.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
             if (matchVagas) vagas = matchVagas[0];
 
-            // Extrair Remuneração / Salário
             let remuneracao = 'Consulte o edital';
-            const matchSalario = textoBlocoPuro.match(/(R\$\s*[\d.,]+(?:\s*a\s*R\$\s*[\d.,]+)?)/i);
+            const matchSalario = tituloLimpo.match(/(R\$\s*[\d.,]+(?:\s*a\s*R\$\s*[\d.,]+)?)/i);
             if (matchSalario) remuneracao = matchSalario[1];
 
-            // Extrair Escolaridade
             let escolaridade = 'Consulte o edital';
-            if (/superior/i.test(textoBlocoPuro)) escolaridade = 'Ensino Superior';
-            else if (/médio|medio/i.test(textoBlocoPuro)) escolaridade = 'Ensino Médio';
-            else if (/fundamental/i.test(textoBlocoPuro)) escolaridade = 'Ensino Fundamental';
+            if (/superior/i.test(tituloLimpo)) escolaridade = 'Ensino Superior';
+            else if (/médio|medio/i.test(tituloLimpo)) escolaridade = 'Ensino Médio';
+            else if (/fundamental/i.test(tituloLimpo)) escolaridade = 'Ensino Fundamental';
 
             const orgao = tituloLimpo.split('-')[0].trim();
 
