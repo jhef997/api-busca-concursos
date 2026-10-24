@@ -62,7 +62,7 @@ class ConcursosService {
             relatorioFontes.push({ id: fonteId, nome, status: 'OPERACIONAL', erro: null });
             fontesComSucesso++;
           } else {
-            relatorioFontes.push({ id: fonteId, nome, status: 'FALHA', erro: resultado?.erro || 'Erro desconhecido' });
+            relatorioFontes.push({ id: fonteId, nome, status: 'FALHA', erro: resultado?.erro || 'Erro na fonte' });
           }
         }
       }
@@ -87,17 +87,21 @@ class ConcursosService {
     const { q, estado, municipio, orgao, cargo, situacao, pagina = 1, limite = 20 } = filtros;
     const registroCache = await this.obterDadosAgregados();
 
-    let filtrados = registroCache.dados.filter(c => {
+    const listaDados = (registroCache && Array.isArray(registroCache.dados)) ? registroCache.dados : [];
+
+    let filtrados = listaDados.filter(c => {
+      if (!c) return false;
+
       if (q) {
         const termo = normalizarTexto(q);
-        const emTitulo = normalizarTexto(c.titulo).includes(termo);
-        const emOrgao = normalizarTexto(c.orgao).includes(termo);
-        const emCargo = normalizarTexto(c.cargo).includes(termo);
+        const emTitulo = normalizarTexto(c.titulo || '').includes(termo);
+        const emOrgao = normalizarTexto(c.orgao || '').includes(termo);
+        const emCargo = normalizarTexto(c.cargo || '').includes(termo);
         if (!emTitulo && !emOrgao && !emCargo) return false;
       }
 
       if (estado) {
-        if (!c.uf || c.uf.toUpperCase() !== estado.toUpperCase()) return false;
+        if (!c.uf || String(c.uf).toUpperCase() !== String(estado).toUpperCase()) return false;
       }
 
       if (municipio) {
@@ -113,7 +117,7 @@ class ConcursosService {
       }
 
       if (situacao) {
-        if (!c.situacao || c.situacao.toUpperCase() !== situacao.toUpperCase()) return false;
+        if (!c.situacao || String(c.situacao).toUpperCase() !== String(situacao).toUpperCase()) return false;
       }
 
       return true;
@@ -130,36 +134,48 @@ class ConcursosService {
       total: filtrados.length,
       pagina: pageNum,
       limite: limitNum,
-      cacheObsoleto: registroCache.obsoleto || false,
-      ultimaAtualizacao: registroCache.ultimaAtualizacaoIso,
-      fontes: registroCache.fontes
+      cacheObsoleto: registroCache?.obsoleto || false,
+      ultimaAtualizacao: registroCache?.ultimaAtualizacaoIso || new Date().toISOString(),
+      fontes: registroCache?.fontes || []
     };
   }
 
   async buscarPorId(id) {
     const registroCache = await this.obterDadosAgregados();
-    return registroCache.dados.find(c => c.id === id) || null;
+    const listaDados = (registroCache && Array.isArray(registroCache.dados)) ? registroCache.dados : [];
+    return listaDados.find(c => c && c.id === id) || null;
   }
 
   deduplicarEMesclar(concursos) {
+    if (!Array.isArray(concursos)) return [];
     const mapa = new Map();
 
     concursos.forEach(item => {
-      const chaveDeduplicacao = item.linkFonte && item.linkFonte.startsWith('http')
-        ? normalizarTexto(item.linkFonte)
-        : `${normalizarTexto(item.titulo)}|${normalizarTexto(item.orgao)}|${item.uf || 'BR'}`;
+      if (!item) return;
+
+      const tituloStr = String(item.titulo || 'Concurso sem título');
+      const orgaoStr = String(item.orgao || 'Não informado');
+      const ufStr = String(item.uf || 'BR');
+
+      const chaveDeduplicacao = item.linkFonte && String(item.linkFonte).startsWith('http')
+        ? normalizarTexto(String(item.linkFonte))
+        : `${normalizarTexto(tituloStr)}|${normalizarTexto(orgaoStr)}|${ufStr}`;
 
       if (!mapa.has(chaveDeduplicacao)) {
         mapa.set(chaveDeduplicacao, {
           ...item,
-          fontesEncontradas: [item.fonteOrigem]
+          titulo: tituloStr,
+          orgao: orgaoStr,
+          uf: ufStr,
+          fontesEncontradas: [item.fonteOrigem || 'Base Local']
         });
       } else {
         const existente = mapa.get(chaveDeduplicacao);
+        const tituloExistente = String(existente.titulo || '');
 
         mapa.set(chaveDeduplicacao, {
-          id: existente.id,
-          titulo: existente.titulo.length >= item.titulo.length ? existente.titulo : item.titulo,
+          id: existente.id || item.id,
+          titulo: tituloExistente.length >= tituloStr.length ? tituloExistente : tituloStr,
           orgao: existente.orgao || item.orgao,
           cargo: existente.cargo || item.cargo,
           escolaridade: existente.escolaridade || item.escolaridade,
@@ -171,8 +187,8 @@ class ConcursosService {
           dataEncerramento: existente.dataEncerramento || item.dataEncerramento,
           banca: existente.banca || item.banca,
           linkFonte: existente.linkFonte || item.linkFonte,
-          fontesEncontradas: Array.from(new Set([...existente.fontesEncontradas, item.fonteOrigem])),
-          atualizadoEm: existente.atualizadoEm
+          fontesEncontradas: Array.from(new Set([...(existente.fontesEncontradas || []), item.fonteOrigem || 'Base Local'])),
+          atualizadoEm: existente.atualizadoEm || new Date().toISOString()
         });
       }
     });
