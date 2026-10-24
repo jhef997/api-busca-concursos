@@ -4,7 +4,7 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Scraper Robusto com Metadados)';
+    this.nome = 'PCI Concursos (Scraper Anti-Cidades)';
   }
 
   async buscarConcursos() {
@@ -24,13 +24,13 @@ export class PciRssSource {
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
 
-      const termosInstitucionais = [
+      // Prefixos obrigatórios que um edital real deve ter no link ou título
+      const prefixosValidos = [
         'prefeitura', 'camara', 'secretaria', 'tribunal', 'conselho', 'instituto', 
         'universidade', 'faculdade', 'fundacao', 'servico', 'hospital', 'autarquia', 
         'agencia', 'ministerio', 'policia', 'bombeiros', 'guarda', 'comando', 
-        'departamento', 'empresa', 'concurso', 'processo seletivo', 'selecao', 
-        'edital', 'detran', 'sefaz', 'coren', 'crea', 'crm', 'oab', 'tj', 'mp', 
-        'trt', 'tre', 'inss', 'ibge', 'previ', 'ssp', 'mgs', 'inb', 'saneamento'
+        'departamento', 'empresa', 'detran', 'sefaz', 'coren', 'crea', 'crm', 
+        'oab', 'tj-', 'mp-', 'trt', 'tre', 'inss', 'ibge', 'ssp', 'mgs', 'inb'
       ];
 
       for (const pagina of paginas) {
@@ -58,16 +58,18 @@ export class PciRssSource {
 
             const cleanHref = href.split('?')[0].split('#')[0];
             const partes = cleanHref.split('/').filter(Boolean);
-            const slugFinal = partes[partes.length - 1].toLowerCase();
 
-            const ignorados = ['sp', 'mg', 'rj', 'ma', 'ba', 'pr', 'rs', 'sc', 'nacional', 'nordeste', 'sul', 'norte', 'sudeste', 'centrooeste', 'cidades', 'professores', 'previstos', 'cargos', 'vagas'];
-            if (ignorados.includes(slugFinal) || !slugFinal.includes('-')) continue;
+            // FILTRE CRUCIAL 1: Links de cidades têm 3 partes (ex: /concursos/sp/adamantina). Ignoramos todos!
+            // Apenas aceitamos links diretos de 2 partes (ex: /concursos/prefeitura-de-matao-sp)
+            if (partes.length !== 2) continue;
 
-            const textoCompleto = (tituloLimpo + ' ' + href).toLowerCase();
-            const ehOrgaoReal = termosInstitucionais.some(termo => textoCompleto.includes(termo));
-            if (!ehOrgaoReal) continue;
+            const slug = partes[1].toLowerCase();
 
-            // Blacklist limpa (sem "vagas" para não bloquear editais reais)
+            // FILTRO CRUCIAL 2: O slug do edital deve começar obrigatoriamente com um termo institucional real
+            const comecaComOrgao = prefixosValidos.some(termo => slug.startsWith(termo));
+            if (!comecaComOrgao) continue;
+
+            // Lista negra para eliminar lixo residual
             const blacklist = /apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
             if (blacklist.test(tituloLimpo)) continue;
 
@@ -75,7 +77,7 @@ export class PciRssSource {
             if (urlsAdicionadas.has(linkFonte)) continue;
             urlsAdicionadas.add(linkFonte);
 
-            // Extração segura direto do título do edital
+            // Extração de dados do título
             let vagas = 'Consulte o edital';
             const matchVagas = tituloLimpo.match(/(\d+\s+vagas?|cadastro\s+de\s+reserva)/i);
             if (matchVagas) vagas = matchVagas[0];
