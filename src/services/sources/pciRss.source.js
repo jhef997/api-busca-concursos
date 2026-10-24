@@ -30,11 +30,11 @@ export class PciRssSource {
 
           const html = String(response.data || '');
 
-          // Captura ampla de todas as tags <a href="...">
-          const regexTagA = /<a[\s\S]*?href=["']([^"']+)["'][\s\S]*?>([\s\S]*?)<\/a>/gi;
+          // Captura estritamente URLs que contêm /concurso/ (SINGULAR = Edital do Concurso)
+          const regexConcursoReal = /<a\s+[^>]*href="([^"]*?\/concurso\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
 
           let match;
-          while ((match = regexTagA.exec(html)) !== null) {
+          while ((match = regexConcursoReal.exec(html)) !== null) {
             let href = match[1].trim();
             let tituloRaw = match[2];
 
@@ -44,16 +44,13 @@ export class PciRssSource {
               .replace(/\s+/g, ' ')
               .trim();
 
-            if (!tituloLimpo || tituloLimpo.length < 6) continue;
+            if (!tituloLimpo || tituloLimpo.length < 5) continue;
 
-            // Filtra links que pertencem a editais/concursos específicos
-            const ehConcursoValido = href.includes('/concurso/') || 
-              (href.includes('/concursos/') && !href.endsWith('/concursos/') && !/\/(ma|nordeste|nacional|sudeste|norte|centrooeste|sul|cidades|professores|previstos|cargos|vagas)\/?$/i.test(href));
+            // Ignora links de diretórios no plural (/concursos/)
+            if (href.includes('/concursos/')) continue;
 
-            if (!ehConcursoValido) continue;
-
-            // Filtro de exclusão de termos de menu/propaganda
-            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas|inscreva-se|leia mais|clique aqui|lista geral/i;
+            // Filtro de exclusão para termos irrelevantes
+            const blacklist = /veja mais|notícias|artigos|anterior|próxima|home|contato|privacidade|termos|apostilas|provas|simulados|aulas/i;
             if (blacklist.test(tituloLimpo)) continue;
 
             // Formata URL relativa para absoluta
