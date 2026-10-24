@@ -4,24 +4,29 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Web Scraper Real)';
+    this.nome = 'PCI Concursos (Web Scraper Nacional)';
   }
 
   async buscarConcursos() {
     try {
+      // Cobertura completa de todas as regiões do Brasil
       const paginas = [
-        { url: 'https://www.pciconcursos.com.br/concursos/ma/', ufPadrao: 'MA' },
-        { url: 'https://www.pciconcursos.com.br/concursos/nordeste/', ufPadrao: 'NE' },
-        { url: 'https://www.pciconcursos.com.br/concursos/nacional/', ufPadrao: 'BR' }
+        { url: 'https://www.pciconcursos.com.br/concursos/nacional/' },
+        { url: 'https://www.pciconcursos.com.br/concursos/sudeste/' },
+        { url: 'https://www.pciconcursos.com.br/concursos/sul/' },
+        { url: 'https://www.pciconcursos.com.br/concursos/nordeste/' },
+        { url: 'https://www.pciconcursos.com.br/concursos/norte/' },
+        { url: 'https://www.pciconcursos.com.br/concursos/centrooeste/' }
       ];
 
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
+      const ufsValidas = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
       for (const pagina of paginas) {
         try {
           const response = await axios.get(pagina.url, {
-            timeout: 10000,
+            timeout: 12000,
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -39,26 +44,45 @@ export class PciRssSource {
             let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
             if (!tituloLimpo || tituloLimpo.length < 10) continue;
-
-            // 1. OBRIGATÓRIO: Apenas domínios de concursos/notícias
             if (!href.includes('/concursos/') && !href.includes('/noticias/')) continue;
 
-            // 2. FILTRO MATEMÁTICO: Conta as partes da URL
-            // Transforma '/concursos/ma/acailandia' em ['concursos', 'ma', 'acailandia'] (3 partes = BLOQUEADO)
-            // Transforma '/concursos/prefeitura-de-xyz' em ['concursos', 'prefeitura-de-xyz'] (2 partes = APROVADO)
-            const urlLimpa = href.replace('https://www.pciconcursos.com.br', '').split('?')[0].split('#')[0];
-            const partesUrl = urlLimpa.split('/').filter(Boolean); 
-            
-            if (partesUrl.length !== 2) continue; // Elimina instantaneamente cidades e menus base
+            // Normaliza a URL para análise de estrutura e UF
+            let urlLimpa = href.replace('https://www.pciconcursos.com.br', '').split('?')[0].split('#')[0];
+            const partes = urlLimpa.split('/').filter(Boolean);
 
-            // 3. RECUSAR lixo e menus laterais
-            const slug = partesUrl[1];
-            if (slug.length < 6 || slug === 'nacional' || slug === 'nordeste' || slug === 'cidades' || slug === 'sudeste') continue;
+            if (partes.length < 2 || partes[0] !== 'concursos') continue;
+
+            let ufDetectada = 'BR'; // Padrão nacional caso não identifique o estado
+            let slug = '';
+
+            // Formato 1: /concursos/slug (ex: /concursos/prefeitura-de-sao-paulo-sp)
+            if (partes.length === 2) {
+              slug = partes[1];
+              const matchUfSlug = slug.match(/-([a-z]{2})$/i);
+              if (matchUfSlug && ufsValidas.includes(matchUfSlug[1].toUpperCase())) {
+                ufDetectada = matchUfSlug[1].toUpperCase();
+              }
+            } 
+            // Formato 2: /concursos/uf/slug (ex: /concursos/sp/prefeitura-de-sao-paulo)
+            else if (partes.length === 3) {
+              const possivelUf = partes[1].toUpperCase();
+              if (ufsValidas.includes(possivelUf)) {
+                ufDetectada = possivelUf;
+                slug = partes[2];
+              } else {
+                continue;
+              }
+            } else {
+              continue;
+            }
+
+            // Ignorar menus e páginas genéricas de navegação
+            const ignorados = ['nacional', 'sudeste', 'sul', 'nordeste', 'norte', 'centrooeste', 'cidades', 'professores', 'previstos', 'cargos', 'vagas', 'ma', 'sp', 'rj', 'mg', 'es', 'pr', 'sc', 'rs', 'ba', 'pe', 'ce', 'go', 'df'];
+            if (ignorados.includes(slug)) continue;
 
             const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
             if (blacklist.test(tituloLimpo)) continue;
 
-            // 4. Salvar Edital Real
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
 
             if (urlsAdicionadas.has(linkFonte)) continue;
@@ -71,10 +95,10 @@ export class PciRssSource {
               titulo: tituloLimpo,
               orgao: orgao || 'Não informado',
               cargo: 'Consulte o edital no site',
-              escolaridade: 'Consulte o edital',
-              vagas: 'Consulte o edital',
-              remuneracao: 'Consulte o edital',
-              uf: pagina.ufPadrao,
+              escolaridade: 'Consulte no edital',
+              vagas: 'Consulte no edital',
+              remuneracao: 'Consulte no edital',
+              uf: ufDetectada,
               municipio: null,
               situacao: 'ABERTO',
               dataEncerramento: null,
