@@ -1,134 +1,76 @@
-import { PciRssSource } from '../services/sources/pciRss.source.js';
+// src/services/sources/pciRss.source.js
+import axios from 'axios';
+import { gerarHashEstavel } from '../../utils/hash.util.js';
+import { parseListaConcursos } from '../../utils/pciParser.js';
 
-const pciSource = new PciRssSource();
+// Lista geral: traz todos os estados (inclusive PI) com cargo, UF, vagas, salário e prazo.
+const URL_LISTA = 'https://www.pciconcursos.com.br/concursos/';
 
-// Base local de contingência fixa
-const baseLocal = [
-  {
-    id: "pmma-2026-01",
-    titulo: "Concurso Polícia Militar do Maranhão - PMMA",
-    orgao: "Polícia Militar do Maranhão (PM-MA)",
-    cargo: "Soldado / Oficial",
-    escolaridade: "Ensino Médio / Superior",
-    vagas: "A definir",
-    remuneracao: "R$ 4.800,00",
-    uf: "MA",
-    municipio: "São Luís",
-    situacao: "ABERTO",
-    dataEncerramento: null,
-    banca: "A definir",
-    linkFonte: "https://www.ma.gov.br/pmma",
-    fonteOrigem: "Base Local",
-    atualizadoEm: new Date().toISOString()
-  },
-  {
-    id: "cbmma-2026-02",
-    titulo: "Concurso Corpo de Bombeiros Militar do Maranhão - CBMMA",
-    orgao: "Corpo de Bombeiros Militar do Maranhão (CBM-MA)",
-    cargo: "Soldado Bombeiro Militar",
-    escolaridade: "Ensino Médio",
-    vagas: "A definir",
-    remuneracao: "R$ 4.500,00",
-    uf: "MA",
-    municipio: "São Luís",
-    situacao: "ABERTO",
-    dataEncerramento: null,
-    banca: "A definir",
-    linkFonte: "https://www.ma.gov.br/cbmma",
-    fonteOrigem: "Base Local",
-    atualizadoEm: new Date().toISOString()
+const HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'pt-BR,pt;q=0.9'
+};
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export class PciRssSource {
+  constructor() {
+    this.id = 'pci_concursos';
+    this.nome = 'PCI Concursos (lista geral)';
   }
-];
 
-export async function getConcursos(req, res) {
-  try {
-    let dadosPci = [];
-    let statusPci = "OPERACIONAL";
-    let erroPci = null;
-
-    try {
-      const resultadoPci = await pciSource.buscarConcursos();
-      if (resultadoPci.sucesso) {
-        dadosPci = resultadoPci.dados;
-      } else {
-        statusPci = "FALHA";
-        erroPci = resultadoPci.erro;
+  async baixar(tentativas = 3) {
+    let ultimoErro;
+    for (let i = 1; i <= tentativas; i++) {
+      try {
+        const res = await axios.get(URL_LISTA, {
+          timeout: 20000,
+          headers: HEADERS,
+          responseType: 'text'
+        });
+        return String(res.data || '');
+      } catch (err) {
+        ultimoErro = err;
+        console.error(`PCI: tentativa ${i}/${tentativas} falhou: ${err.message}`);
+        if (i < tentativas) await esperar(1000 * i);
       }
-    } catch (err) {
-      statusPci = "FALHA";
-      erroPci = err.message;
     }
-
-    let concursos = [...baseLocal, ...dadosPci];
-    const { q, estado, pagina = 1, limite = 20 } = req.query;
-
-    // Filtro por Estado
-    if (estado) {
-      const ufBusca = estado.toUpperCase();
-      concursos = concursos.filter(c => c.uf === ufBusca || c.uf === 'BR');
-    }
-
-    // Filtro por Palavra-Chave / Profissão com normalização de acentos
-    if (q) {
-      const termoBusca = q
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
-
-      concursos = concursos.filter(c => {
-        const titulo = (c.titulo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const orgao = (c.orgao || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        const cargo = (c.cargo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-        return titulo.includes(termoBusca) || orgao.includes(termoBusca) || cargo.includes(termoBusca);
-      });
-    }
-
-    const total = concursos.length;
-    const inicio = (parseInt(pagina) - 1) * parseInt(limite);
-    const fim = inicio + parseInt(limite);
-    const dadosPaginados = concursos.slice(inicio, fim);
-
-    return res.json({
-      sucesso: true,
-      dados: dadosPaginados,
-      total: total,
-      pagina: parseInt(pagina),
-      limite: parseInt(limite),
-      cacheObsoleto: false,
-      ultimaAtualizacao: new Date().toISOString(),
-      fontes: [
-        { id: "local_fallback", nome: "Base Local de Contingência", status: "OPERACIONAL", erro: null },
-        { id: "denodev", nome: "DenoDev API", status: "FALHA", erro: "Request failed with status code 404" },
-        { id: "pci_concursos", nome: pciSource.nome, status: statusPci, erro: erroPci }
-      ]
-    });
-
-  } catch (error) {
-    console.error('Erro no Controller:', error.message);
-    return res.status(500).json({ sucesso: false, dados: [], erro: error.message });
+    throw ultimoErro;
   }
-}
 
-export async function getConcursoPorId(req, res) {
-  try {
-    const { id } = req.params;
-    let dadosPci = [];
+  async buscarConcursos() {
     try {
-      const resultadoPci = await pciSource.buscarConcursos();
-      if (resultadoPci.sucesso) dadosPci = resultadoPci.dados;
-    } catch (e) {}
+      const html = await this.baixar();
+      const itens = parseListaConcursos(html);
 
-    const todos = [...baseLocal, ...dadosPci];
-    const concurso = todos.find(c => c.id === id);
+      if (!itens.length) {
+        // layout mudou ou página vazia: o controller mantém o último cache bom
+        return { sucesso: false, dados: [], erro: 'Nenhum concurso encontrado na página do PCI' };
+      }
 
-    if (!concurso) {
-      return res.status(404).json({ sucesso: false, mensagem: 'Concurso não encontrado' });
+      const agora = new Date().toISOString();
+      const dados = itens.map((i) => ({
+        id: gerarHashEstavel(i.titulo, i.linkFonte),
+        ...i,
+        banca: 'Não informada',
+        fonteOrigem: 'PCI Concursos (Ao Vivo)',
+        atualizadoEm: agora
+      }));
+
+      return { sucesso: true, dados };
+    } catch (error) {
+      return { sucesso: false, dados: [], erro: error.message };
     }
+  }
 
-    return res.json({ sucesso: true, dados: concurso });
-  } catch (error) {
-    console.error('Erro ao buscar por ID:', error.message);
-    return res.status(500).json({ sucesso: false, erro: error.message });
+  async checarDisponibilidade() {
+    try {
+      await axios.head(URL_LISTA, { timeout: 8000, headers: HEADERS });
+      return { id: this.id, nome: this.nome, disponivel: true };
+    } catch (err) {
+      return { id: this.id, nome: this.nome, disponivel: false, erro: err.message };
+    }
   }
 }
