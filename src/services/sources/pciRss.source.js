@@ -4,7 +4,7 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Web Scraper por Estado)';
+    this.nome = 'PCI Concursos (Web Scraper Filtrado)';
   }
 
   async buscarConcursos() {
@@ -23,6 +23,16 @@ export class PciRssSource {
 
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
+
+      // Termos obrigatórios que comprovam que é um órgão/concurso real e não apenas o nome de uma cidade
+      const termosInstitucionais = [
+        'prefeitura', 'camara', 'secretaria', 'tribunal', 'conselho', 'instituto', 
+        'universidade', 'faculdade', 'fundacao', 'servico', 'hospital', 'autarquia', 
+        'agencia', 'ministerio', 'policia', 'bombeiros', 'guarda', 'comando', 
+        'departamento', 'empresa', 'concurso', 'processo seletivo', 'selecao', 
+        'edital', 'detran', 'sefaz', 'coren', 'crea', 'crm', 'oab', 'tj', 'mp', 
+        'trt', 'tre', 'inss', 'ibge', 'previ', 'ssp', 'mgs', 'inb', 'saneamento'
+      ];
 
       for (const pagina of paginas) {
         try {
@@ -45,14 +55,17 @@ export class PciRssSource {
             let tituloLimpo = tituloRaw.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
 
             if (!tituloLimpo || tituloLimpo.length < 8) continue;
-            
-            // CORREÇÃO: Aceita tanto /concurso/ (singular) quanto /concursos/ (plural)
             if (!href.includes('/concurso')) continue;
 
-            // Ignorar links de navegação dos menus das páginas
+            // Ignorar links de navegação e menus base
             if (href.endsWith('/concursos/') || href.endsWith('/sp/') || href.endsWith('/mg/') || href.endsWith('/rj/') || href.endsWith('/ma/') || href.endsWith('/ba/') || href.endsWith('/pr/') || href.endsWith('/rs/') || href.endsWith('/sc/') || href.endsWith('/nacional/')) continue;
 
-            // Filtro de lixo / menus e diretórios de cidades
+            // FILTRO RIGOROSO: O título ou o link DEVE conter um termo institucional válido (bloqueia nomes soltos de cidades e menus)
+            const textoCompleto = (tituloLimpo + ' ' + href).toLowerCase();
+            const ehOrgaoReal = termosInstitucionais.some(termo => textoCompleto.includes(termo));
+            if (!ehOrgaoReal) continue;
+
+            // Lista negra extra para garantir zero lixo
             const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais|cidades|professores|previstos|cargos/i;
             if (blacklist.test(tituloLimpo)) continue;
 
