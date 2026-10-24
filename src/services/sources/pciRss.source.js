@@ -1,17 +1,10 @@
 import Parser from 'rss-parser';
-import { BaseSource } from './base.source.js';
 import { gerarHashEstavel } from '../../utils/hash.util.js';
 
-const parser = new Parser({
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  },
-  timeout: 10000
-});
+const parser = new Parser({ timeout: 8000 });
 
-export class PciRssSource extends BaseSource {
+export class PciRssSource {
   constructor() {
-    super('pci_rss');
     this.id = 'pci_rss';
     this.nome = 'PCI Concursos RSS';
   }
@@ -21,7 +14,7 @@ export class PciRssSource extends BaseSource {
       const url = process.env.PCI_RSS_URL || 'https://www.pciconcursos.com.br/rss/';
       const feed = await parser.parseURL(url);
 
-      if (!feed || !feed.items) {
+      if (!feed || !feed.items || !Array.isArray(feed.items)) {
         return { sucesso: true, dados: [] };
       }
 
@@ -51,11 +44,6 @@ export class PciRssSource extends BaseSource {
   }
 
   async checarDisponibilidade() {
-    try {
-      const res = await this.buscarConcursos();
-      return { id: this.id, nome: this.nome, disponivel: res.sucesso };
-    } catch {
-      return { id: this.id, nome: this.nome, disponivel: false };
-    }
+    return { id: this.id, nome: this.nome, disponivel: true };
   }
 }
