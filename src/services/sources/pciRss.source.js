@@ -4,7 +4,7 @@ import { gerarHashEstavel } from '../../utils/hash.util.js';
 export class PciRssSource {
   constructor() {
     this.id = 'pci_concursos';
-    this.nome = 'PCI Concursos (Web Scraper Rigoroso)';
+    this.nome = 'PCI Concursos (Web Scraper Definitivo)';
   }
 
   async buscarConcursos() {
@@ -23,6 +23,15 @@ export class PciRssSource {
 
       let todosConcursos = [];
       const urlsAdicionadas = new Set();
+
+      const termosInstitucionais = [
+        'prefeitura', 'camara', 'secretaria', 'tribunal', 'conselho', 'instituto', 
+        'universidade', 'faculdade', 'fundacao', 'servico', 'hospital', 'autarquia', 
+        'agencia', 'ministerio', 'policia', 'bombeiros', 'guarda', 'comando', 
+        'departamento', 'empresa', 'concurso', 'processo seletivo', 'selecao', 
+        'edital', 'detran', 'sefaz', 'coren', 'crea', 'crm', 'oab', 'tj', 'mp', 
+        'trt', 'tre', 'inss', 'ibge', 'previ', 'ssp', 'mgs', 'inb', 'saneamento'
+      ];
 
       for (const pagina of paginas) {
         try {
@@ -46,11 +55,30 @@ export class PciRssSource {
 
             if (!tituloLimpo || tituloLimpo.length < 8) continue;
 
-            // FILTRO CRUCIAL: Exige estritamente /concurso/ (singular) e bloqueia /concursos/ (plural/diretórios/regiões)
-            if (!href.includes('/concurso/') || href.includes('/concursos/')) continue;
+            // Deve conter obrigatoriamente /concursos/
+            if (!href.includes('/concursos/')) continue;
 
-            // Lista negra de termos genéricos caso apareçam
-            const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais|cidades|professores|previstos|cargos|nordeste|centro-oeste|sul|norte|sudeste/i;
+            const cleanHref = href.split('?')[0].split('#')[0];
+            const partes = cleanHref.split('/').filter(Boolean);
+
+            if (partes.length < 2) continue;
+
+            // Ignorar páginas de índice estadual ou regional
+            const ignorados = ['sp', 'mg', 'rj', 'ma', 'ba', 'pr', 'rs', 'sc', 'nacional', 'nordeste', 'sul', 'norte', 'sudeste', 'centrooeste', 'cidades', 'professores', 'previstos', 'cargos', 'vagas'];
+            const slugFinal = partes[partes.length - 1].toLowerCase();
+
+            if (ignorados.includes(slugFinal)) continue;
+
+            // O edital real tem de conter hífens no nome do link (ex: prefeitura-de-...)
+            if (!slugFinal.includes('-')) continue;
+
+            // Filtro rigoroso: O título ou o link deve conter um termo institucional válido
+            const textoCompleto = (tituloLimpo + ' ' + href).toLowerCase();
+            const ehOrgaoReal = termosInstitucionais.some(termo => textoCompleto.includes(termo));
+            if (!ehOrgaoReal) continue;
+
+            // Lista negra de termos indesejados
+            const blacklist = /vagas|apostilas|provas|simulados|aulas|notícias|artigos|anterior|próxima|lista geral|índice|veja mais/i;
             if (blacklist.test(tituloLimpo)) continue;
 
             let linkFonte = href.startsWith('http') ? href : `https://www.pciconcursos.com.br${href}`;
